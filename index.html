@@ -1,8 +1,298 @@
-<Html>
-  <heaD>
-  
-  </heaD>
-  <body>
-    123
-  </body>
-</Html>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>바른 자세 & 나쁜 자세 판별기</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 2.2em;
+        }
+
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        button {
+            background-color: #007bff; /* Blue for start */
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.2);
+        }
+
+        button:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #webcam-container {
+            border: 3px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 200px; /* Match webcam dimensions */
+            height: 200px; /* Match webcam dimensions */
+        }
+
+        #label-container {
+            width: 100%;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .prediction-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease, border-left-color 0.3s ease;
+        }
+
+        .prediction-item.good {
+            background-color: #e8f5e9; /* Light green */
+            border-left: 5px solid #4CAF50; /* Green border */
+            color: #2e7d32; /* Darker green text */
+        }
+
+        .prediction-item.bad {
+            background-color: #ffebee; /* Light red */
+            border-left: 5px solid #f44336; /* Red border */
+            color: #d32f2f; /* Darker red text */
+        }
+        
+        .prediction-item.default {
+            background-color: #e0e0e0; /* Light gray */
+            border-left: 5px solid #9e9e9e; /* Gray border */
+            color: #424242; /* Darker gray text */
+        }
+
+        .prediction-item span {
+            font-weight: bold;
+        }
+
+        .prediction-item .class-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .prediction-item .class-name i {
+            font-size: 1.2em;
+        }
+
+        /* Current status display */
+        #current-status {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 20px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            transition: background-color 0.5s ease;
+        }
+
+        #current-status.good-status {
+            background-color: #4CAF50; /* Green for good */
+        }
+
+        #current-status.bad-status {
+            background-color: #f44336; /* Red for bad */
+        }
+
+        #current-status.default-status {
+            background-color: #9e9e9e; /* Gray initially */
+        }
+
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            button {
+                width: 100%;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            #current-status {
+                font-size: 1.2em;
+                padding: 10px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>바른 자세 & 나쁜 자세 판별기</h1>
+    <div class="container">
+        <button type="button" onclick="init()">웹캠 시작</button>
+        <div id="webcam-container"></div>
+        <div id="label-container"></div>
+        <div id="current-status" class="default-status">웹캠을 시작해주세요.</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        // Teachable Machine 모델 URL을 여기에 넣어주세요.
+        const URL = "https://teachablemachine.withgoogle.com/models/EwTF8Qb8K/"; 
+
+        let model, webcam, labelContainer, maxPredictions;
+        let currentStatusDiv; // 현재 상태를 표시할 div
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                const flip = true;
+                webcam = new tmImage.Webcam(200, 200, flip);
+                await webcam.setup();
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                document.getElementById("webcam-container").innerHTML = ''; 
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                
+                labelContainer = document.getElementById("label-container");
+                labelContainer.innerHTML = ''; 
+                
+                // Set up initial prediction items
+                for (let i = 0; i < maxPredictions; i++) {
+                    const predictionDiv = document.createElement("div");
+                    predictionDiv.classList.add("prediction-item", "default"); // Add default class
+                    
+                    const classNameSpan = document.createElement("span");
+                    classNameSpan.classList.add("class-name");
+                    
+                    const probabilitySpan = document.createElement("span");
+                    
+                    predictionDiv.appendChild(classNameSpan);
+                    predictionDiv.appendChild(probabilitySpan);
+                    labelContainer.appendChild(predictionDiv);
+                }
+
+                currentStatusDiv = document.getElementById("current-status");
+                currentStatusDiv.innerText = "자세를 인식하는 중...";
+                currentStatusDiv.classList.remove('default-status', 'good-status', 'bad-status');
+                currentStatusDiv.classList.add('default-status');
+
+            } catch (error) {
+                console.error("모델 로드 또는 웹캠 설정 오류:", error);
+                alert("모델을 로드하거나 웹캠에 접근하는 데 실패했습니다. 모델 URL과 웹캠 권한을 확인해주세요.");
+            }
+        }
+
+        async function loop() {
+            if (webcam) { 
+                webcam.update();
+                await predict();
+            }
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            if (!model || !webcam) return; 
+
+            const prediction = await model.predict(webcam.canvas);
+            let goodProbability = 0;
+            let badProbability = 0;
+            let goodIndex = -1;
+            let badIndex = -1;
+
+            // Find "good" and "bad" class probabilities and indices
+            for (let i = 0; i < maxPredictions; i++) {
+                const className = prediction[i].className.toLowerCase();
+                const probability = prediction[i].probability;
+
+                const predictionDiv = labelContainer.childNodes[i];
+                const classNameSpan = predictionDiv.childNodes[0];
+                const probabilitySpan = predictionDiv.childNodes[1];
+
+                // Reset classes
+                predictionDiv.classList.remove('good', 'bad', 'default');
+
+                let iconHtml = '';
+                if (className.includes("good")) {
+                    goodProbability = probability;
+                    goodIndex = i;
+                    iconHtml = '<i class="fas fa-check-circle"></i>'; // Check icon for good
+                    predictionDiv.classList.add('good');
+                } else if (className.includes("bad")) {
+                    badProbability = probability;
+                    badIndex = i;
+                    iconHtml = '<i class="fas fa-times-circle"></i>'; // Times icon for bad
+                    predictionDiv.classList.add('bad');
+                } else {
+                    predictionDiv.classList.add('default');
+                }
+
+                classNameSpan.innerHTML = `${iconHtml} ${prediction[i].className}:`;
+                probabilitySpan.innerText = `${(probability * 100).toFixed(0)}%`;
+            }
+
+            // Determine and display current status
+            if (goodProbability > badProbability) {
+                currentStatusDiv.innerText = `바른 자세입니다! (${(goodProbability * 100).toFixed(0)}%)`;
+                currentStatusDiv.classList.remove('bad-status', 'default-status');
+                currentStatusDiv.classList.add('good-status');
+            } else if (badProbability > goodProbability) {
+                currentStatusDiv.innerText = `나쁜 자세입니다! (${(badProbability * 100).toFixed(0)}%)`;
+                currentStatusDiv.classList.remove('good-status', 'default-status');
+                currentStatusDiv.classList.add('bad-status');
+            } else {
+                 currentStatusDiv.innerText = "자세 인식 중...";
+                 currentStatusDiv.classList.remove('good-status', 'bad-status');
+                 currentStatusDiv.classList.add('default-status');
+            }
+        }
+    </script>
+</body>
+</html>
